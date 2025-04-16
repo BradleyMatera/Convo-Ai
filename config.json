@@ -1,0 +1,33 @@
+{
+  "model": "llama3:latest",
+  "continuous": true,
+  "input_mode": "voice",
+  "ws_url": "ws://localhost:8000/ws",
+  "voice_model": "tts_models/en/vctk/vits",
+  "voice_speed": 1.0,
+  "voice_pitch": 1.0,
+  "conversation_settings": {
+    "max_history": 10,
+    "response_length": "medium",
+    "personality": "professional_friendly",
+    "humor_level": "subtle",
+    "accent": "british",
+    "persist_history": true
+  },
+  "model_settings": {
+    "temperature": 0.7,
+    "top_p": 0.9,
+    "top_k": 40,
+    "num_predict": 300,
+    "repeat_penalty": 1.1,
+    "presence_penalty": 0.1,
+    "frequency_penalty": 0.1,
+    "num_ctx": 2048
+  },
+  "tts_settings": {
+    "temperature": 0.7,
+    "length_scale": 1.0,
+    "noise_scale": 0.667,
+    "noise_scale_w": 0.8
+  }
+}

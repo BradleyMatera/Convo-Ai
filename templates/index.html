@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Convo-AI Interface</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .input-section {
+            margin-bottom: 20px;
+        }
+        .input-mode {
+            margin-bottom: 10px;
+        }
+        .input-mode button {
+            padding: 8px 16px;
+            margin-right: 10px;
+            border: none;
+            border-radius: 4px;
+            background-color: #007bff;
+            color: white;
+            cursor: pointer;
+        }
+        .input-mode button.active {
+            background-color: #0056b3;
+        }
+        #textInput {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            margin-bottom: 10px;
+        }
+        #voiceInput {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            margin-bottom: 10px;
+        }
+        .response {
+            margin-top: 20px;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            background-color: #f9f9f9;
+        }
+        .controls {
+            margin-top: 20px;
+        }
+        .controls button {
+            padding: 8px 16px;
+            margin-right: 10px;
+            border: none;
+            border-radius: 4px;
+            background-color: #28a745;
+            color: white;
+            cursor: pointer;
+        }
+        .controls button:disabled {
+            background-color: #6c757d;
+            cursor: not-allowed;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Convo-AI Interface</h1>
+        
+        <div class="input-mode">
+            <button id="textModeBtn" class="active">Text Input</button>
+            <button id="voiceModeBtn">Voice Input</button>
+        </div>
+
+        <div class="input-section">
+            <div id="textInputSection">
+                <textarea id="textInput" rows="4" placeholder="Type your message here..."></textarea>
+            </div>
+            <div id="voiceInputSection" style="display: none;">
+                <input type="file" id="voiceInput" accept="audio/*" capture="microphone">
+            </div>
+        </div>
+
+        <div class="controls">
+            <button id="sendBtn">Send</button>
+            <button id="clearBtn">Clear</button>
+        </div>
+
+        <div class="response">
+            <h3>Response:</h3>
+            <div id="responseText"></div>
+            <audio id="responseAudio" controls style="margin-top: 10px;"></audio>
+        </div>
+    </div>
+
+    <script>
+        const ws = new WebSocket('ws://localhost:8000/ws');
+        const textModeBtn = document.getElementById('textModeBtn');
+        const voiceModeBtn = document.getElementById('voiceModeBtn');
+        const textInputSection = document.getElementById('textInputSection');
+        const voiceInputSection = document.getElementById('voiceInputSection');
+        const textInput = document.getElementById('textInput');
+        const voiceInput = document.getElementById('voiceInput');
+        const sendBtn = document.getElementById('sendBtn');
+        const clearBtn = document.getElementById('clearBtn');
+        const responseText = document.getElementById('responseText');
+        const responseAudio = document.getElementById('responseAudio');
+
+        let currentMode = 'text';
+
+        textModeBtn.addEventListener('click', () => {
+            currentMode = 'text';
+            textModeBtn.classList.add('active');
+            voiceModeBtn.classList.remove('active');
+            textInputSection.style.display = 'block';
+            voiceInputSection.style.display = 'none';
+        });
+
+        voiceModeBtn.addEventListener('click', () => {
+            currentMode = 'voice';
+            voiceModeBtn.classList.add('active');
+            textModeBtn.classList.remove('active');
+            voiceInputSection.style.display = 'block';
+            textInputSection.style.display = 'none';
+        });
+
+        sendBtn.addEventListener('click', async () => {
+            if (currentMode === 'text') {
+                const text = textInput.value.trim();
+                if (text) {
+                    ws.send(JSON.stringify({ text }));
+                    textInput.value = '';
+                }
+            } else {
+                const file = voiceInput.files[0];
+                if (file) {
+                    const reader = new FileReader();
+                    reader.onload = (e) => {
+                        ws.send(e.target.result);
+                    };
+                    reader.readAsArrayBuffer(file);
+                }
+            }
+        });
+
+        clearBtn.addEventListener('click', () => {
+            responseText.textContent = '';
+            responseAudio.src = '';
+        });
+
+        ws.onmessage = (event) => {
+            const data = JSON.parse(event.data);
+            if (data.response) {
+                responseText.textContent = data.response;
+            }
+            if (data.audio) {
+                responseAudio.src = `data:audio/wav;base64,${data.audio}`;
+                responseAudio.play();
+            }
+        };
+
+        ws.onerror = (error) => {
+            console.error('WebSocket error:', error);
+            responseText.textContent = 'Error connecting to server. Please try again.';
+        };
+    </script>
+</body>
+</html> 
