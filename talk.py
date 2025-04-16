@@ -13,6 +13,7 @@ import threading
 import shutil
 import subprocess
 import hashlib
+import random
 
 import torch
 from TTS.api import TTS as CoquiTTS
@@ -39,10 +40,41 @@ MOOD_STATE = {"positive": 0, "neutral": 0, "negative": 0}
 RECORDING = False
 ffmpeg_proc = None
 
+# Jarvis interaction settings
+JARVIS_SETTINGS = {
+    "greetings": [
+        "Good day, Sir. How may I assist you?",
+        "At your service, Sir.",
+        "How can I be of assistance today?",
+        "I'm here to help, Sir."
+    ],
+    "farewells": [
+        "Until next time, Sir.",
+        "Goodbye, Sir.",
+        "Have a pleasant day, Sir.",
+        "I'll be here if you need anything else."
+    ],
+    "thinking": [
+        "Processing your request, Sir.",
+        "One moment, please.",
+        "Analyzing the situation.",
+        "Let me think about that."
+    ]
+}
+
+def print_jarvis_header():
+    print("\n" + "="*50)
+    print("J.A.R.V.I.S. - Just A Rather Very Intelligent System")
+    print("="*50 + "\n")
+
+def print_jarvis_footer():
+    print("\n" + "="*50)
+    print("J.A.R.V.I.S. Session Complete")
+    print("="*50 + "\n")
 
 def record_audio_dynamic():
     global ffmpeg_proc
-    print("🎤 Listening... press [r] again to stop.")
+    print("\n🎤 Listening... press [r] again to stop.")
     try:
         # First, ensure the input file is empty
         with open(INPUT_FILE, 'wb') as f:
@@ -74,7 +106,6 @@ def record_audio_dynamic():
         print(f"❌ Error starting audio recording: {str(e)}")
         return False
 
-
 def animate_mic():
     frames = [
         "[=     ]",
@@ -92,7 +123,6 @@ def animate_mic():
         time.sleep(0.1)
         i += 1
     print("\r\033[1;34m🛑 Done recording.\033[0m      ")
-
 
 def wait_for_r_toggle():
     global RECORDING, ffmpeg_proc
@@ -122,10 +152,8 @@ def wait_for_r_toggle():
     finally:
         termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
 
-
 def start_recording_by_keypress():
     wait_for_r_toggle()
-
 
 def analyze_mood(text):
     if not text:
@@ -141,11 +169,9 @@ def analyze_mood(text):
         MOOD_STATE["neutral"] += 1
         return "neutral"
 
-
 def hash_audio_cache_key(text, model, speed, pitch):
     key = f"{text}-{model}-{speed}-{pitch}"
     return hashlib.md5(key.encode()).hexdigest()
-
 
 async def send_and_receive(input_mode="voice"):
     try:
@@ -171,7 +197,7 @@ async def send_and_receive(input_mode="voice"):
                     print(f"❌ Error processing text input: {str(e)}")
                     return
 
-            print("⌛ Waiting for response...")
+            print(random.choice(JARVIS_SETTINGS["thinking"]))
             response = await websocket.recv()
             data = json.loads(response)
 
@@ -214,22 +240,20 @@ async def send_and_receive(input_mode="voice"):
         else:
             print("Please try typing your message again.")
 
-
 def print_memory():
     if not SESSION_LOG:
         print("\nNo conversation history available.")
         return
+    print("\n📜 Conversation History:")
     for entry in SESSION_LOG:
         print(f"\n[{entry['timestamp']}]")
         print(f"You: {entry['user']}")
-        print(f"AI : {entry['assistant']}")
-
+        print(f"Jarvis: {entry['assistant']}")
 
 def print_mood_summary():
-    print("\n📈 Mood Summary:")
+    print("\n📈 Mood Analysis:")
     for k, v in MOOD_STATE.items():
         print(f" - {k.title()}: {v}")
-
 
 def save_session():
     os.makedirs("logs", exist_ok=True)
@@ -237,7 +261,6 @@ def save_session():
     with open(filename, "w") as f:
         json.dump(SESSION_LOG, f, indent=2)
     print(f"\n✅ Session saved to {filename}")
-
 
 def load_session_history():
     global SESSION_LOG
@@ -249,66 +272,57 @@ def load_session_history():
                 default=None
             )
             if latest_log:
-                with open(os.path.join("logs", latest_log)) as f:
+                with open(os.path.join("logs", latest_log), "r") as f:
                     SESSION_LOG = json.load(f)
+                print(f"\n📚 Loaded previous conversation from {latest_log}")
     except Exception as e:
-        print(f"Could not load session history: {e}")
+        print(f"❌ Error loading session history: {str(e)}")
 
-
-def main():
+async def main():
     # Load previous conversation history
     load_session_history()
     
+    # Print header
+    print_jarvis_header()
+    
+    # Print welcome message
+    print(random.choice(JARVIS_SETTINGS["greetings"]))
+    
     try:
-        print("\n🎛️ JARVIS Interface")
-        print("Press [r] to start recording, [t] for text input, [q] to quit")
-        print("Press [h] to view conversation history")
-        
         while True:
-            print("\nSelect input mode:")
-            print("1. Voice input (press 'r' to record)")
-            print("2. Text input (press 't')")
-            print("3. View history (press 'h')")
-            print("4. Quit (press 'q')")
+            print("\nOptions:")
+            print("1. Voice input (press 'r' to start/stop recording)")
+            print("2. Text input")
+            print("3. View conversation history")
+            print("4. View mood analysis")
+            print("5. Save and exit")
             
-            choice = input("\nEnter your choice (1-4): ").strip().lower()
+            choice = input("\nSelect an option (1-5): ")
             
-            if choice == '1' or choice == 'r':
+            if choice == "1":
                 start_recording_by_keypress()
-                if os.path.exists(INPUT_FILE) and os.path.getsize(INPUT_FILE) > 0:
-                    asyncio.run(send_and_receive("voice"))
-                    os.unlink(INPUT_FILE)
-            elif choice == '2' or choice == 't':
-                user_input = input("\n📝 Type your message: ").strip()
-                if user_input:
-                    try:
-                        with open("typed_input.json", "w") as f:
-                            json.dump({"text": user_input}, f)
-                        asyncio.run(send_and_receive("text"))
-                    finally:
-                        if os.path.exists("typed_input.json"):
-                            os.unlink("typed_input.json")
-            elif choice == '3' or choice == 'h':
+                await send_and_receive("voice")
+            elif choice == "2":
+                text = input("\nEnter your message: ")
+                with open("typed_input.json", "w") as f:
+                    json.dump({"text": text}, f)
+                await send_and_receive("text")
+            elif choice == "3":
                 print_memory()
-            elif choice == '4' or choice == 'q':
-                print("\n👋 Goodbye!")
+            elif choice == "4":
+                print_mood_summary()
+            elif choice == "5":
+                save_session()
+                print(random.choice(JARVIS_SETTINGS["farewells"]))
+                print_jarvis_footer()
                 break
             else:
-                print("\n❌ Invalid choice. Please try again.")
+                print("Invalid choice. Please try again.")
                 
     except KeyboardInterrupt:
-        print("\n\n👋 Goodbye!")
-    except Exception as e:
-        print(f"\n❌ Error: {str(e)}")
-    finally:
         save_session()
-        print_mood_summary()
-        # Clean up any temporary files
-        if os.path.exists(INPUT_FILE):
-            os.unlink(INPUT_FILE)
-        if os.path.exists("typed_input.json"):
-            os.unlink("typed_input.json")
-
+        print("\n" + random.choice(JARVIS_SETTINGS["farewells"]))
+        print_jarvis_footer()
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())

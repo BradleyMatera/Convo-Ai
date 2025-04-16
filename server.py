@@ -18,6 +18,7 @@ import uvicorn
 import json
 import requests
 from pydub import AudioSegment
+import re
 
 # Configure logging
 logging.basicConfig(level=logging.DEBUG)
@@ -36,6 +37,31 @@ torch.serialization.add_safe_globals([
 # Initialize session log
 SESSION_LOG = []
 
+# Jarvis personality settings
+JARVIS_PERSONALITY = {
+    "name": "Jarvis",
+    "voice": "p225",  # British male voice
+    "speed": 1.0,
+    "pitch": 1.0,
+    "greetings": [
+        "How may I assist you today?",
+        "At your service.",
+        "How can I help you?",
+        "What can I do for you?"
+    ],
+    "acknowledgments": [
+        "Understood.",
+        "I'll take care of that.",
+        "Processing your request.",
+        "Right away."
+    ],
+    "error_responses": [
+        "I apologize, but I'm having trouble processing that request.",
+        "I'm afraid I can't assist with that at the moment.",
+        "I'm experiencing some difficulties. Could you please rephrase that?"
+    ]
+}
+
 def check_ollama_service():
     """Check if Ollama service is running and start it if not."""
     try:
@@ -51,6 +77,23 @@ def check_ollama_service():
     except FileNotFoundError:
         logger.error("Ollama not found. Please install Ollama first.")
         raise
+
+def naturalize_response(text):
+    """Make the response more natural and Jarvis-like."""
+    # Remove any "Assistant:" or "AI:" prefixes
+    text = re.sub(r'^(Assistant|AI):\s*', '', text)
+    
+    # Add natural pauses
+    text = re.sub(r'([.!?])\s+', r'\1\n', text)
+    
+    # Ensure proper capitalization
+    text = text.strip().capitalize()
+    
+    # Add Jarvis-like signature if it's a complete thought
+    if text.endswith(('.', '!', '?')):
+        text = f"{text} Sir."
+    
+    return text
 
 try:
     check_ollama_service()
@@ -149,12 +192,15 @@ async def websocket_endpoint(websocket: WebSocket):
             await websocket.close()
             return
 
-        print(f"Calling llm model={config['model']}, prompt={prompt}")
+        # Add context about being Jarvis
+        enhanced_prompt = f"You are Jarvis, a sophisticated AI assistant. You are helpful, professional, and slightly formal. You address the user as 'Sir' or 'Madam'. You have a British accent and speak in a clear, concise manner. Respond to this: {prompt}"
+
+        print(f"Calling llm model={config['model']}, prompt={enhanced_prompt}")
         response = requests.post(
             OLLAMA_API_URL,
             json={
                 "model": config["model"],
-                "prompt": prompt,
+                "prompt": enhanced_prompt,
                 "stream": False,
                 "options": {
                     "temperature": config.get("model_settings", {}).get("temperature", 0.7),
@@ -173,8 +219,11 @@ async def websocket_endpoint(websocket: WebSocket):
         response_text = response.json().get("response", "").strip()
         
         if not response_text:
-            response_text = "I do apologise, I didn't quite catch that. Could you please repeat?"
+            response_text = "I do apologize, I didn't quite catch that. Could you please repeat?"
 
+        # Naturalize the response
+        response_text = naturalize_response(response_text)
+        
         # Generate TTS audio for the response
         audio_path = os.path.join(TTS_CACHE_DIR, f"{hash_response(response_text)}.wav")
         
@@ -182,8 +231,8 @@ async def websocket_endpoint(websocket: WebSocket):
             tts_model.tts_to_file(
                 text=response_text,
                 file_path=audio_path,
-                speaker=config.get("tts_speaker", "p225"),
-                speed=config.get("tts_speed", 1.0)
+                speaker=JARVIS_PERSONALITY["voice"],
+                speed=JARVIS_PERSONALITY["speed"]
             )
         
         with open(audio_path, "rb") as f:
