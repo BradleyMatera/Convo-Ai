@@ -7,30 +7,55 @@ async function main() {
   await page.goto("http://localhost:5173/", { waitUntil: "networkidle" });
   await page.waitForTimeout(4000);
 
-  // Screenshot 1: Empty state with animated orb + quick prompts
+  // Screenshot 1: Empty state with orb + quick prompts
   await page.screenshot({
     path: "/Users/bradleymatera/Desktop/convo-ai-isolated/Convo-Ai/assets/screenshots/web-ui.png",
   });
-  console.log("Saved web-ui.png (empty state with orb)");
+  console.log("Saved web-ui.png (empty state)");
 
-  // Click a quick prompt
-  const quickBtn = page.locator('button:has-text("Tell me a joke")').first();
-  if (await quickBtn.isVisible()) {
-    await quickBtn.click();
-    console.log("Clicked quick prompt, waiting for response...");
-    await page.waitForTimeout(30000);
-
-    // Screenshot 2: With conversation
+  // Click "My name is Bradley" quick prompt
+  const nameBtn = page.locator('button:has-text("My name is Bradley")').first();
+  if (await nameBtn.isVisible()) {
+    await nameBtn.click();
+    console.log("Clicked name prompt, waiting for response...");
+    await page.waitForTimeout(40000);
     await page.screenshot({
       path: "/Users/bradleymatera/Desktop/convo-ai-isolated/Convo-Ai/assets/screenshots/web-ui-response.png",
     });
-    console.log("Saved web-ui-response.png (with real conversation)");
+    console.log("Saved web-ui-response.png (with conversation + memory indicators)");
   }
 
-  // Type a message
-  const input = page.locator('input[placeholder*="Message"]');
+  // Click Memory tab
+  const memoryTab = page.locator('button:has-text("memory")').first();
+  if (await memoryTab.isVisible()) {
+    await memoryTab.click();
+    await page.waitForTimeout(2000);
+    await page.screenshot({
+      path: "/Users/bradleymatera/Desktop/convo-ai-isolated/Convo-Ai/assets/screenshots/web-ui-memory.png",
+    });
+    console.log("Saved web-ui-memory.png (memory panel)");
+  }
+
+  // Click Personality tab
+  const personalityTab = page.locator('button:has-text("personality")').first();
+  if (await personalityTab.isVisible()) {
+    await personalityTab.click();
+    await page.waitForTimeout(1000);
+    await page.screenshot({
+      path: "/Users/bradleymatera/Desktop/convo-ai-isolated/Convo-Ai/assets/screenshots/web-ui-personality.png",
+    });
+    console.log("Saved web-ui-personality.png (personality editor)");
+  }
+
+  // Back to chat tab, type a message
+  const chatTab = page.locator('button:has-text("chat")').first();
+  if (await chatTab.isVisible()) {
+    await chatTab.click();
+    await page.waitForTimeout(500);
+  }
+  const input = page.locator('input[placeholder*="Message"]').first();
   if (await input.isVisible()) {
-    await input.fill("What can you do, Jarvis?");
+    await input.fill("What is my name?");
     await page.waitForTimeout(500);
     await page.screenshot({
       path: "/Users/bradleymatera/Desktop/convo-ai-isolated/Convo-Ai/assets/screenshots/web-ui-typing.png",
@@ -47,21 +72,7 @@ async function main() {
       path: "/Users/bradleymatera/Desktop/convo-ai-isolated/Convo-Ai/assets/screenshots/web-ui-settings.png",
     });
     console.log("Saved web-ui-settings.png");
-
-    // Close settings
     await page.keyboard.press("Escape");
-    await page.waitForTimeout(500);
-  }
-
-  // Click voice mode (mic button)
-  const micBtn = page.locator('button[title*="voice"]').first();
-  if (await micBtn.isVisible()) {
-    await micBtn.click();
-    await page.waitForTimeout(1000);
-    await page.screenshot({
-      path: "/Users/bradleymatera/Desktop/convo-ai-isolated/Convo-Ai/assets/screenshots/web-ui-voice.png",
-    });
-    console.log("Saved web-ui-voice.png (recording state)");
   }
 
   await browser.close();

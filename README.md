@@ -55,17 +55,20 @@ Convo-AI is a personal, offline voice assistant built around a "Jarvis" persona 
 
 - Accepts voice or typed input through a CLI or a React web UI.
 - Returns a natural-language response and a base64-encoded WAV audio reply.
+- **Learns and remembers** — extracts facts from every conversation, embeds them with `nomic-embed-text`, and retrieves relevant memories via RAG (cosine similarity) before each response.
+- **Editable personality** — the system prompt is stored in SQLite and editable from the UI. Switch from Jarvis to Friday to anything else instantly.
+- **Model selection** — switch between any local Ollama model from the UI dropdown without restarting.
 - Caches generated speech to avoid repeated TTS work.
 - Persists conversation history in SQLite.
 - Performs lightweight keyword mood analysis.
 
 **Who it is for:**
 
-- Developers who want a fully local, hackable voice assistant.
-- Users experimenting with Ollama, Whisper, and Coqui TTS.
-- Teams that need a privacy-first AI assistant template.
+- Developers who want a fully local, hackable voice assistant that gets smarter over time.
+- Users experimenting with Ollama, Whisper, Coqui TTS, and RAG.
+- Teams that need a privacy-first AI assistant template with memory.
 
-**Current state:** v0.2.0 — Alpha. The core pipeline works end-to-end. The project includes tests, CI, Docker, and a marketing site.
+**Current state:** v0.3.0 — Alpha. The core pipeline works end-to-end with RAG memory and editable personality. The project includes tests, CI, Docker, and a marketing site.
 
 ---
 
@@ -85,9 +88,33 @@ Convo-AI is a personal, offline voice assistant built around a "Jarvis" persona 
 - Response naturalization: strips `Assistant:`/`AI:` prefixes, adds a `Sir.` sign-off.
 - TTS result caching in `tts_cache/`.
 
+### RAG memory & learning
+
+- **Fact extraction**: After every conversation, the LLM extracts memorable facts (name, preferences, goals, instructions) and stores them in SQLite.
+- **Embedding-based retrieval**: Facts are embedded with `nomic-embed-text` (768-dim). On each new message, the top-5 most relevant memories are retrieved via cosine similarity and injected into the prompt.
+- **Importance scoring**: Memories are boosted by importance weight in retrieval.
+- **Categorized storage**: Facts are tagged as `[name]`, `[preference]`, `[fact]`, `[instruction]`, `[goal]`, or `[general]`.
+- **Manual memory**: Add, edit, or delete memories directly from the UI.
+- **Memory panel**: Sidebar tab showing all stored memories with categories, timestamps, and retrieval counts.
+- **Learning indicators**: Chat messages show "🧠 N memories used" and "✨ Learned N new facts" badges.
+
+### Editable personality
+
+- **System prompt stored in SQLite**: Edit Jarvis's personality, name, speaking style, and behavior from the UI — no code changes needed.
+- **Instant switching**: Change from "Jarvis" to "Friday" to anything else and it takes effect on the next message.
+- **Reset button**: One-click reset to the default Jarvis personality.
+- **Personality tab**: Full textarea editor in the sidebar with save/reset buttons.
+
+### Model management
+
+- **Model selector**: Dropdown in the sidebar listing all local Ollama models with file sizes.
+- **Hot-swap**: Switch models at runtime without restarting the server.
+- **Runtime config**: Adjust temperature, voice speaker, voice speed, and max tokens from the settings panel.
+
 ### Persistence & history
 
 - SQLite database via `sqlmodel` for conversation history.
+- Separate SQLite database for memory (with embeddings) and system prompt.
 - REST API endpoints to list and clear history.
 - CLI saves timestamped JSON logs to `logs/`.
 - Mood tracking (positive/neutral/negative keyword counts).
@@ -98,7 +125,13 @@ Convo-AI is a personal, offline voice assistant built around a "Jarvis" persona 
 - Live WebSocket connection with connection status indicator.
 - In-browser voice recording via `MediaRecorder` API.
 - Previous session history loaded on page open.
-- Animated typing indicator and audio playback inline.
+- Animated Jarvis orb (idle=blue pulse, thinking=purple rotate, recording=red pulse).
+- Sidebar with three tabs: Chat, Memory, Personality.
+- Quick prompt buttons on empty state.
+- Voice wave visualizer during recording.
+- Message bubbles with avatars, timestamps, mood indicators, model badges, and memory/learning indicators.
+- Inline audio player with dark theme.
+- Glass-morphism settings modal.
 
 ### Cross-platform CLI
 
@@ -121,9 +154,17 @@ Convo-AI is a personal, offline voice assistant built around a "Jarvis" persona 
 
 ![Web UI](assets/screenshots/web-ui.png)
 
-### Web UI — Real conversation with Ollama
+### Web UI — Real conversation with memory indicators
 
 ![Web UI Response](assets/screenshots/web-ui-response.png)
+
+### Web UI — Memory panel (RAG-stored facts, categorized)
+
+![Web UI Memory](assets/screenshots/web-ui-memory.png)
+
+### Web UI — Personality editor (editable system prompt)
+
+![Web UI Personality](assets/screenshots/web-ui-personality.png)
 
 ### Web UI — Typing a message
 

@@ -42,7 +42,13 @@ response.wav
 typed_input.json
 conversation_log.json
 convo_ai.db
+convo_ai_memory.db
+convo_ai_prompt.db
 test_convo.db
+test_convo_memory.db
+test_convo_prompt.db
+.coverage
+htmlcov/
 
 # Node
 node_modules/
