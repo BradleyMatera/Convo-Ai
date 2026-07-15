@@ -14,6 +14,14 @@ interface Message {
   timestamp: string;
 }
 
+interface ConversationEntry {
+  id: number;
+  user_text: string;
+  assistant_text: string;
+  mood: string;
+  timestamp: string;
+}
+
 interface OllamaModel {
   name: string;
   size: number;
@@ -101,7 +109,8 @@ export default function App() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [sidebarTab, setSidebarTab] = useState<SidebarTab>("chat");
-  const [history, setHistory] = useState<Message[]>([]);
+  const [history, setHistory] = useState<ConversationEntry[]>([]);
+  const [viewingHistory, setViewingHistory] = useState<ConversationEntry | null>(null);
   const [models, setModels] = useState<OllamaModel[]>([]);
   const [currentModel, setCurrentModel] = useState<string>("");
   const [config, setConfig] = useState<AppConfig | null>(null);
@@ -191,7 +200,7 @@ export default function App() {
     fetch("/api/models").then(r => r.json()).then(d => { setModels(d.models || []); setCurrentModel(d.current || ""); }).catch(() => {});
     fetch("/api/config").then(r => r.json()).then(setConfig).catch(() => {});
     fetch("/api/history?limit=50").then(r => r.json()).then(d => {
-      if (Array.isArray(d) && d.length > 0) setHistory(d.map((e: any) => ({ id: e.id, role: "assistant" as const, text: e.assistant_text, mood: e.mood, timestamp: e.timestamp })));
+      if (Array.isArray(d)) setHistory(d);
     }).catch(() => {});
     refreshMemories();
     fetch("/api/prompt").then(r => r.json()).then(d => { setSystemPrompt(d.prompt || ""); setDefaultPrompt(d.default || ""); }).catch(() => {});
@@ -206,6 +215,7 @@ export default function App() {
   const sendText = (overrideText?: string) => {
     const trimmed = (overrideText ?? text).trim();
     if (!trimmed) return;
+    setViewingHistory(null);
     setMessages((p) => [...p, { id: nextId(), role: "user", text: trimmed, timestamp: new Date().toISOString() }]);
     setText("");
     setOrbState("thinking");
@@ -298,7 +308,17 @@ export default function App() {
     fetch("/api/prompt/reset", { method: "POST" }).then(r => r.json()).then(d => { setSystemPrompt(d.prompt); setPromptEdited(false); }).catch(() => {});
   };
 
-  const clearHistory = () => { fetch("/api/history", { method: "DELETE" }).then(() => { setHistory([]); setMessages([]); }).catch(() => {}); };
+  const clearHistory = () => { fetch("/api/history", { method: "DELETE" }).then(() => { setHistory([]); setMessages([]); setViewingHistory(null); }).catch(() => {}); };
+
+  const loadConversation = (entry: ConversationEntry) => {
+    setViewingHistory(entry);
+  };
+
+  const newChat = () => {
+    setViewingHistory(null);
+    setMessages([]);
+    setShowQuickPrompts(true);
+  };
 
   // ─── Derived ────────────────────────────────────────────────────────
 
@@ -342,6 +362,16 @@ export default function App() {
           {/* ── Chat tab: model + history ── */}
           {sidebarTab === "chat" && (
             <>
+              {/* New Chat button */}
+              <div className="border-b border-slate-800/60 px-3 py-3">
+                <button onClick={newChat}
+                  className="flex w-full items-center justify-center gap-2 rounded-lg border border-slate-700 bg-slate-800/50 px-3 py-2.5 text-sm font-medium text-slate-300 transition hover:border-blue-500 hover:bg-slate-800 hover:text-white">
+                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
+                  New Chat
+                </button>
+              </div>
+
+              {/* Model selector */}
               <div className="border-b border-slate-800/60 px-5 py-4">
                 <label className="mb-2 block text-xs font-semibold uppercase tracking-wider text-slate-500">Active Model</label>
                 <select value={currentModel} onChange={(e) => switchModel(e.target.value)}
@@ -350,23 +380,48 @@ export default function App() {
                   {models.map((m) => <option key={m.name} value={m.name}>{m.name} ({fmtSize(m.size)})</option>)}
                 </select>
               </div>
+
+              {/* History list */}
               <div className="flex-1 overflow-y-auto px-3 py-3">
                 <div className="mb-2 flex items-center justify-between px-2">
-                  <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">History</span>
+                  <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">Conversations</span>
                   {(history.length > 0 || messages.length > 0) && <button onClick={clearHistory} className="text-xs text-slate-600 hover:text-red-400">Clear</button>}
                 </div>
                 {history.length === 0 && messages.length === 0 ? (
                   <p className="px-2 py-4 text-sm text-slate-600">No conversations yet.</p>
                 ) : (
                   <div className="space-y-1">
-                    {messages.filter((m) => m.role === "assistant").slice(-10).reverse().map((m) => (
-                      <button key={m.id} className="block w-full truncate rounded-lg px-2 py-2 text-left text-sm text-slate-400 hover:bg-slate-800/60 hover:text-slate-200" title={m.text}>{m.text.slice(0, 50)}…</button>
-                    ))}
+                    {/* Current session exchanges */}
+                    {messages.length > 0 && (
+                      <>
+                        <div className="mb-1 px-2 text-xs font-medium text-blue-400">This session</div>
+                        {messages.filter((m) => m.role === "user").slice(-10).reverse().map((m, i) => {
+                          const assistant = messages.filter((m2) => m2.role === "assistant")[messages.filter((m3) => m3.role === "assistant").length - 1 - i];
+                          return (
+                            <button key={m.id}
+                              onClick={() => assistant && loadConversation({ id: m.id, user_text: m.text, assistant_text: assistant.text, mood: assistant.mood || "neutral", timestamp: m.timestamp })}
+                              className={`block w-full rounded-lg px-2 py-2 text-left text-sm transition hover:bg-slate-800/60 hover:text-slate-200 ${viewingHistory?.id === m.id ? "bg-blue-500/10 text-blue-300" : "text-slate-400"}`}>
+                              <span className="block truncate" title={m.text}>{m.text.slice(0, 45)}…</span>
+                            </button>
+                          );
+                        })}
+                      </>
+                    )}
+                    {/* Previous sessions from DB */}
                     {history.length > 0 && (
                       <>
                         <div className="mb-1 mt-3 px-2 text-xs font-medium text-slate-400">Previous</div>
-                        {history.slice(0, 10).map((m) => (
-                          <button key={`h-${m.id}`} className="block w-full truncate rounded-lg px-2 py-2 text-left text-sm text-slate-500 hover:bg-slate-800/60 hover:text-slate-300" title={m.text}>{m.text.slice(0, 50)}…</button>
+                        {history.slice(0, 20).map((entry) => (
+                          <button key={`h-${entry.id}`}
+                            onClick={() => loadConversation(entry)}
+                            className={`block w-full rounded-lg px-2 py-2 text-left transition hover:bg-slate-800/60 hover:text-slate-300 ${viewingHistory?.id === entry.id ? "bg-blue-500/10 text-blue-300" : "text-slate-500"}`}>
+                            <span className="block truncate text-sm" title={entry.user_text}>
+                              {entry.user_text.slice(0, 45)}…
+                            </span>
+                            <span className="mt-0.5 block truncate text-xs text-slate-600">
+                              {fmtTime(entry.timestamp)}
+                            </span>
+                          </button>
                         ))}
                       </>
                     )}
@@ -523,7 +578,45 @@ export default function App() {
 
         <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-6 md:px-8">
           <div className="mx-auto max-w-3xl space-y-6">
-            {messages.length === 0 && (
+            {/* ── History view: showing a past conversation ── */}
+            {viewingHistory && (
+              <>
+                <div className="mb-4 flex items-center justify-between rounded-lg border border-slate-800 bg-slate-900/40 px-4 py-2.5">
+                  <span className="text-xs text-slate-500">Viewing past conversation · {fmtTime(viewingHistory.timestamp)}</span>
+                  <button onClick={newChat} className="text-xs font-medium text-blue-400 hover:text-blue-300">
+                    ← Back to chat
+                  </button>
+                </div>
+                {/* User message */}
+                <div className="flex justify-end msg-enter">
+                  <div className="flex max-w-[80%] flex-row-reverse gap-3">
+                    <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-slate-700 text-sm font-bold text-slate-300">U</div>
+                    <div className="rounded-2xl rounded-tr-sm bg-blue-600 px-4 py-3 text-white">
+                      <p className="whitespace-pre-wrap text-sm leading-relaxed">{viewingHistory.user_text}</p>
+                      <div className="mt-2 text-xs text-blue-300">{fmtTime(viewingHistory.timestamp)}</div>
+                    </div>
+                  </div>
+                </div>
+                {/* Assistant message */}
+                <div className="flex justify-start msg-enter">
+                  <div className="flex max-w-[80%] gap-3">
+                    <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-cyan-600 text-sm font-bold text-white">J</div>
+                    <div className="rounded-2xl rounded-tl-sm border border-slate-700/50 bg-slate-800/60 px-4 py-3 text-slate-100">
+                      <p className="whitespace-pre-wrap text-sm leading-relaxed">{viewingHistory.assistant_text}</p>
+                      <div className="mt-2 flex items-center gap-3 text-xs text-slate-500">
+                        <span>{fmtTime(viewingHistory.timestamp)}</span>
+                        {viewingHistory.mood && viewingHistory.mood !== "neutral" && (
+                          <span className={viewingHistory.mood === "positive" ? "text-emerald-400" : viewingHistory.mood === "negative" ? "text-red-400" : "text-slate-500"}>{viewingHistory.mood}</span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </>
+            )}
+
+            {/* ── Live chat: empty state ── */}
+            {!viewingHistory && messages.length === 0 && (
               <div className="flex flex-col items-center justify-center py-16">
                 <div className={`mb-8 flex h-32 w-32 items-center justify-center rounded-full bg-gradient-to-br ${orbColor} ${orbClass}`}>
                   <div className="flex h-24 w-24 items-center justify-center rounded-full bg-slate-950/40"><span className="text-3xl font-bold gradient-text">J</span></div>
@@ -540,7 +633,7 @@ export default function App() {
               </div>
             )}
 
-            {messages.map((m) => (
+            {!viewingHistory && messages.map((m) => (
               <div key={m.id} className={`flex msg-enter ${m.role === "user" ? "justify-end" : "justify-start"}`}>
                 <div className={`flex max-w-[80%] gap-3 ${m.role === "user" ? "flex-row-reverse" : "flex-row"}`}>
                   <div className={`flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full text-sm font-bold ${m.role === "user" ? "bg-slate-700 text-slate-300" : "bg-gradient-to-br from-blue-500 to-cyan-600 text-white"}`}>{m.role === "user" ? "U" : "J"}</div>
@@ -564,7 +657,7 @@ export default function App() {
               </div>
             ))}
 
-            {orbState === "thinking" && messages.length > 0 && (
+            {!viewingHistory && orbState === "thinking" && messages.length > 0 && (
               <div className="flex justify-start msg-enter">
                 <div className="flex gap-3">
                   <div className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-purple-500 to-indigo-600 text-sm font-bold text-white">J</div>
@@ -583,6 +676,13 @@ export default function App() {
 
         {/* Input bar */}
         <div className="border-t border-slate-800/60 px-4 py-4 md:px-8">
+          {viewingHistory ? (
+            <div className="mx-auto max-w-3xl text-center">
+              <button onClick={newChat} className="rounded-xl border border-slate-700 bg-slate-800/50 px-6 py-3 text-sm font-medium text-slate-300 transition hover:border-blue-500 hover:bg-slate-800 hover:text-white">
+                ← Start a new conversation
+              </button>
+            </div>
+          ) : (
           <div className="mx-auto flex max-w-3xl items-end gap-3">
             <button onClick={isRecording ? stopRecording : startRecording} disabled={connState !== "connected"}
               className={`flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-full transition disabled:opacity-40 ${isRecording ? "bg-red-500 hover:bg-red-600" : "bg-slate-800 hover:bg-slate-700"}`}
@@ -608,9 +708,10 @@ export default function App() {
               <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" /></svg>
             </button>
           </div>
+          )}
           <div className="mx-auto mt-2 max-w-3xl text-center">
             <p className="text-xs text-slate-600">
-              {isRecording ? "Recording — click stop when done" : connState === "connected" ? "Press Enter to send · Click mic for voice · Jarvis learns from every conversation" : "Waiting for server…"}
+              {viewingHistory ? "Viewing a saved conversation" : isRecording ? "Recording — click stop when done" : connState === "connected" ? "Press Enter to send · Click mic for voice · Jarvis learns from every conversation" : "Waiting for server…"}
             </p>
           </div>
         </div>
