@@ -108,6 +108,7 @@ export default function App() {
   const [isRecording, setIsRecording] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
   const [sidebarTab, setSidebarTab] = useState<SidebarTab>("chat");
   const [history, setHistory] = useState<ConversationEntry[]>([]);
   const [viewingHistory, setViewingHistory] = useState<ConversationEntry | null>(null);
@@ -294,11 +295,6 @@ export default function App() {
     fetch(`/api/memory/${id}`, { method: "DELETE" }).then(() => refreshMemories()).catch(() => {});
   };
 
-  const clearMemories = () => {
-    if (!confirm("Delete all memories? This cannot be undone.")) return;
-    fetch("/api/memory", { method: "DELETE" }).then(() => refreshMemories()).catch(() => {});
-  };
-
   const savePrompt = () => {
     fetch("/api/prompt", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ prompt: systemPrompt }) })
       .then(r => r.json()).then(() => { setPromptEdited(false); }).catch(() => {});
@@ -308,7 +304,40 @@ export default function App() {
     fetch("/api/prompt/reset", { method: "POST" }).then(r => r.json()).then(d => { setSystemPrompt(d.prompt); setPromptEdited(false); }).catch(() => {});
   };
 
-  const clearHistory = () => { fetch("/api/history", { method: "DELETE" }).then(() => { setHistory([]); setMessages([]); setViewingHistory(null); }).catch(() => {}); };
+  const clearHistory = () => {
+    if (!confirm("Clear all conversation history? This cannot be undone.")) return;
+    fetch("/api/history", { method: "DELETE" }).then(() => { setHistory([]); setMessages([]); setViewingHistory(null); }).catch(() => {});
+    setMenuOpen(false);
+  };
+
+  const clearCurrentChat = () => {
+    setMessages([]);
+    setViewingHistory(null);
+    setShowQuickPrompts(true);
+    setMenuOpen(false);
+  };
+
+  const clearMemories = () => {
+    if (!confirm("Delete all memories? Jarvis will forget everything it learned about you.")) return;
+    fetch("/api/memory", { method: "DELETE" }).then(() => refreshMemories()).catch(() => {});
+    setMenuOpen(false);
+  };
+
+  const resetPersonality = () => {
+    if (!confirm("Reset personality to default Jarvis? Your custom prompt will be lost.")) return;
+    fetch("/api/prompt/reset", { method: "POST" }).then(r => r.json()).then(d => { setSystemPrompt(d.prompt); setPromptEdited(false); }).catch(() => {});
+    setMenuOpen(false);
+  };
+
+  const resetAll = () => {
+    if (!confirm("Reset EVERYTHING? This wipes all conversations, memories, and resets the personality. This cannot be undone.")) return;
+    fetch("/api/reset", { method: "POST" }).then(() => {
+      setMessages([]); setHistory([]); setViewingHistory(null); setShowQuickPrompts(true);
+      refreshMemories();
+      fetch("/api/prompt").then(r => r.json()).then(d => { setSystemPrompt(d.prompt || ""); setPromptEdited(false); }).catch(() => {});
+    }).catch(() => {});
+    setMenuOpen(false);
+  };
 
   const loadConversation = (entry: ConversationEntry) => {
     setViewingHistory(entry);
@@ -573,7 +602,49 @@ export default function App() {
               {memories.length > 0 && <span className="ml-1 rounded-md bg-blue-500/10 px-2 py-0.5 text-xs font-medium text-blue-400">🧠 {memories.length}</span>}
             </div>
           </div>
-          {error && <span className="text-xs text-red-400">⚠ {error}</span>}
+          <div className="flex items-center gap-3">
+            {error && <span className="text-xs text-red-400">⚠ {error}</span>}
+            {/* Options dropdown */}
+            <div className="relative">
+              <button onClick={() => setMenuOpen(!menuOpen)}
+                className="flex items-center gap-1 rounded-lg px-2 py-1.5 text-sm text-slate-400 hover:bg-slate-800 hover:text-slate-200"
+                title="Options">
+                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" /></svg>
+              </button>
+              {menuOpen && (
+                <>
+                  {/* Click-away overlay */}
+                  <div className="fixed inset-0 z-40" onClick={() => setMenuOpen(false)} />
+                  {/* Dropdown */}
+                  <div className="absolute right-0 top-full z-50 mt-1 w-64 rounded-xl border border-slate-700/60 bg-slate-900 py-2 shadow-2xl">
+                    <div className="px-3 py-1.5 text-xs font-semibold uppercase tracking-wider text-slate-600">Actions</div>
+                    <button onClick={clearCurrentChat} className="flex w-full items-center gap-3 px-3 py-2.5 text-left text-sm text-slate-300 hover:bg-slate-800">
+                      <svg className="h-4 w-4 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+                      Clear current chat
+                    </button>
+                    <button onClick={clearHistory} className="flex w-full items-center gap-3 px-3 py-2.5 text-left text-sm text-slate-300 hover:bg-slate-800">
+                      <svg className="h-4 w-4 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                      Clear all history
+                    </button>
+                    <div className="my-1 border-t border-slate-800" />
+                    <button onClick={clearMemories} className="flex w-full items-center gap-3 px-3 py-2.5 text-left text-sm text-slate-300 hover:bg-slate-800">
+                      <svg className="h-4 w-4 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" /></svg>
+                      Clear all memories
+                    </button>
+                    <button onClick={resetPersonality} className="flex w-full items-center gap-3 px-3 py-2.5 text-left text-sm text-slate-300 hover:bg-slate-800">
+                      <svg className="h-4 w-4 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+                      Reset personality
+                    </button>
+                    <div className="my-1 border-t border-slate-800" />
+                    <button onClick={resetAll} className="flex w-full items-center gap-3 px-3 py-2.5 text-left text-sm text-red-400 hover:bg-red-500/10">
+                      <svg className="h-4 w-4 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
+                      Reset everything
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
         </header>
 
         <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-6 md:px-8">

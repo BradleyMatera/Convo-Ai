@@ -273,6 +273,24 @@ def create_app(config: Config | None = None) -> FastAPI:
         db.clear_history()
         return {"status": "cleared"}
 
+    @app.post("/api/reset")
+    async def reset_all() -> dict[str, Any]:
+        """Wipe everything: history, memories, and reset personality to default."""
+        results: dict[str, Any] = {}
+        db: Database | None = state.get("db")
+        if db is not None:
+            db.clear_history()
+            results["history"] = "cleared"
+        mem: MemoryService | None = state.get("memory")
+        if mem is not None:
+            count = mem.clear_all()
+            results["memories"] = f"cleared ({count})"
+        prompt_svc: PromptService | None = state.get("prompt")
+        if prompt_svc is not None:
+            prompt_svc.reset_prompt()
+            results["personality"] = "reset"
+        return {"status": "ok", **results}
+
     # ─── Chat (REST) ──────────────────────────────────────────────────
 
     @app.post("/api/chat")
