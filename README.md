@@ -117,17 +117,21 @@ Convo-AI is a personal, offline voice assistant built around a "Jarvis" persona 
 
 ## Screenshots
 
-### Web UI — Chat interface
+### Web UI — Chat interface with animated Jarvis orb
 
 ![Web UI](assets/screenshots/web-ui.png)
+
+### Web UI — Real conversation with Ollama
+
+![Web UI Response](assets/screenshots/web-ui-response.png)
 
 ### Web UI — Typing a message
 
 ![Web UI Typing](assets/screenshots/web-ui-typing.png)
 
-### Web UI — Real conversation with Ollama
+### Web UI — Settings panel (model, temperature, voice, speed)
 
-![Web UI Response](assets/screenshots/web-ui-response.png)
+![Web UI Settings](assets/screenshots/web-ui-settings.png)
 
 ### Web UI — Voice mode
 

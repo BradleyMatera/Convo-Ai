@@ -10,6 +10,7 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
+import requests
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse
@@ -94,6 +95,73 @@ def create_app(config: Config | None = None) -> FastAPI:
             }
         )
 
+    @app.get("/api/models")
+    async def list_models() -> JSONResponse:
+        """List available Ollama models from the local server."""
+        try:
+            resp = requests.get(
+                config.ollama_api_url.replace("/api/generate", "/api/tags"),
+                timeout=10,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            models = [
+                {
+                    "name": m.get("name", ""),
+                    "size": m.get("size", 0),
+                    "modified": m.get("modified_at", ""),
+                }
+                for m in data.get("models", [])
+            ]
+            return JSONResponse({"models": models, "current": config.model})
+        except Exception as exc:
+            logger.error("Failed to list models: %s", exc)
+            return JSONResponse(
+                {"models": [], "current": config.model, "error": str(exc)},
+                status_code=200,
+            )
+
+    @app.put("/api/config")
+    async def update_config(payload: dict[str, Any]) -> dict[str, Any]:
+        """Update runtime configuration (model, temperature, voice settings)."""
+        old_model = config.model
+        if "model" in payload:
+            config.model = payload["model"]
+            # Reinitialize ollama service with new model
+            if "ollama" in state:
+                state["ollama"] = OllamaService(config)
+        if "temperature" in payload:
+            config.model_settings.temperature = float(payload["temperature"])
+        if "voice_speaker" in payload:
+            config.voice_speaker = payload["voice_speaker"]
+        if "voice_speed" in payload:
+            config.voice_speed = float(payload["voice_speed"])
+        if "max_predict" in payload:
+            config.model_settings.num_predict = int(payload["max_predict"])
+        return {
+            "status": "ok",
+            "model": config.model,
+            "temperature": config.model_settings.temperature,
+            "voice_speaker": config.voice_speaker,
+            "voice_speed": config.voice_speed,
+            "model_changed": old_model != config.model,
+        }
+
+    @app.get("/api/config")
+    async def get_config() -> dict[str, Any]:
+        """Return current runtime configuration."""
+        return {
+            "model": config.model,
+            "temperature": config.model_settings.temperature,
+            "top_p": config.model_settings.top_p,
+            "top_k": config.model_settings.top_k,
+            "num_predict": config.model_settings.num_predict,
+            "voice_model": config.voice_model,
+            "voice_speaker": config.voice_speaker,
+            "voice_speed": config.voice_speed,
+            "whisper_model_size": config.whisper_model_size,
+        }
+
     @app.get("/api/history")
     async def get_history(limit: int = 50) -> list[dict[str, Any]]:
         db: Database | None = state.get("db")
@@ -137,7 +205,7 @@ def create_app(config: Config | None = None) -> FastAPI:
 
             if "bytes" in data:
                 audio_data = data["bytes"]
-                with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as f:
+                with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as f:  # noqa: SIM115
                     f.write(audio_data)
                     temp_path = f.name
                 stt: STTService | None = state.get("stt")
@@ -188,6 +256,7 @@ def create_app(config: Config | None = None) -> FastAPI:
                         "response": response_text,
                         "audio": audio_b64,
                         "mood": mood,
+                        "model": config.model,
                     }
                 )
             )

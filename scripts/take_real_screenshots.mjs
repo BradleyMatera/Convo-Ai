@@ -2,53 +2,66 @@ import { chromium } from "playwright";
 
 async function main() {
   const browser = await chromium.launch();
-  const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+  const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
 
-  // Go to the frontend
   await page.goto("http://localhost:5173/", { waitUntil: "networkidle" });
-  await page.waitForTimeout(3000);
+  await page.waitForTimeout(4000);
 
-  // Screenshot 1: Initial state (with previous session loaded)
+  // Screenshot 1: Empty state with animated orb + quick prompts
   await page.screenshot({
     path: "/Users/bradleymatera/Desktop/convo-ai-isolated/Convo-Ai/assets/screenshots/web-ui.png",
   });
-  console.log("Saved web-ui.png (initial state)");
+  console.log("Saved web-ui.png (empty state with orb)");
+
+  // Click a quick prompt
+  const quickBtn = page.locator('button:has-text("Tell me a joke")').first();
+  if (await quickBtn.isVisible()) {
+    await quickBtn.click();
+    console.log("Clicked quick prompt, waiting for response...");
+    await page.waitForTimeout(30000);
+
+    // Screenshot 2: With conversation
+    await page.screenshot({
+      path: "/Users/bradleymatera/Desktop/convo-ai-isolated/Convo-Ai/assets/screenshots/web-ui-response.png",
+    });
+    console.log("Saved web-ui-response.png (with real conversation)");
+  }
 
   // Type a message
-  const input = page.locator('input[placeholder*="Type"]');
+  const input = page.locator('input[placeholder*="Message"]');
   if (await input.isVisible()) {
-    await input.fill("Hello Jarvis, what is 2 plus 2?");
+    await input.fill("What can you do, Jarvis?");
     await page.waitForTimeout(500);
-
-    // Screenshot 2: Typing
     await page.screenshot({
       path: "/Users/bradleymatera/Desktop/convo-ai-isolated/Convo-Ai/assets/screenshots/web-ui-typing.png",
     });
     console.log("Saved web-ui-typing.png");
-
-    // Send the message
-    await input.press("Enter");
-
-    // Wait for the response (Ollama + TTS can take a while)
-    console.log("Waiting for Ollama response...");
-    await page.waitForTimeout(30000);
-
-    // Screenshot 3: With response
-    await page.screenshot({
-      path: "/Users/bradleymatera/Desktop/convo-ai-isolated/Convo-Ai/assets/screenshots/web-ui-response.png",
-    });
-    console.log("Saved web-ui-response.png (with real response)");
   }
 
-  // Switch to voice mode
-  const voiceBtn = page.locator('button:has-text("Voice")').first();
-  if (await voiceBtn.isVisible()) {
-    await voiceBtn.click();
+  // Open settings
+  const settingsBtn = page.locator('button:has-text("Settings")').first();
+  if (await settingsBtn.isVisible()) {
+    await settingsBtn.click();
+    await page.waitForTimeout(1000);
+    await page.screenshot({
+      path: "/Users/bradleymatera/Desktop/convo-ai-isolated/Convo-Ai/assets/screenshots/web-ui-settings.png",
+    });
+    console.log("Saved web-ui-settings.png");
+
+    // Close settings
+    await page.keyboard.press("Escape");
     await page.waitForTimeout(500);
+  }
+
+  // Click voice mode (mic button)
+  const micBtn = page.locator('button[title*="voice"]').first();
+  if (await micBtn.isVisible()) {
+    await micBtn.click();
+    await page.waitForTimeout(1000);
     await page.screenshot({
       path: "/Users/bradleymatera/Desktop/convo-ai-isolated/Convo-Ai/assets/screenshots/web-ui-voice.png",
     });
-    console.log("Saved web-ui-voice.png");
+    console.log("Saved web-ui-voice.png (recording state)");
   }
 
   await browser.close();
