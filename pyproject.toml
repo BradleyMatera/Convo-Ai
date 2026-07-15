@@ -1,0 +1,90 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "convo-ai"
+version = "0.2.0"
+description = "A local-first, voice-enabled conversational AI assistant powered by Ollama, Whisper, and Coqui TTS."
+readme = "README.md"
+license = { file = "LICENSE" }
+requires-python = ">=3.10"
+authors = [
+    { name = "Bradley Matera" },
+]
+keywords = ["ai", "voice-assistant", "ollama", "whisper", "tts", "fastapi", "local-llm"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+dependencies = [
+    "torch>=2.0.1",
+    "TTS>=0.17.6",
+    "faster-whisper>=0.9.0",
+    "fastapi>=0.104.1",
+    "uvicorn[standard]>=0.24.0",
+    "pydub>=0.25.1",
+    "requests>=2.31.0",
+    "websockets>=12.0",
+    "sounddevice>=0.4.6",
+    "soundfile>=0.12.1",
+    "sqlmodel>=0.0.14",
+    "pydantic>=2.0.0",
+    "python-dotenv>=1.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4.0",
+    "pytest-asyncio>=0.21.0",
+    "pytest-cov>=4.1.0",
+    "ruff>=0.1.0",
+    "black>=23.0.0",
+    "mypy>=1.5.0",
+    "httpx>=0.24.0",
+]
+
+[project.scripts]
+convo-ai-server = "convo_ai.cli:run_server"
+convo-ai-cli = "convo_ai.cli:run_client"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+convo_ai = ["py.typed"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W", "UP", "B", "SIM"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["convo_ai"]
+
+[tool.black]
+line-length = 100
+target-version = ["py310"]
+
+[tool.mypy]
+python_version = "3.10"
+strict = true
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+minversion = "7.0"
+addopts = "-ra -q --cov=convo_ai --cov-report=term-missing"
+testpaths = ["tests"]
+asyncio_mode = "auto"

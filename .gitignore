@@ -1,4 +1,3 @@
-# Python
 __pycache__/
 *.py[cod]
 *$py.class
@@ -42,7 +41,19 @@ input.wav
 response.wav
 typed_input.json
 conversation_log.json
+convo_ai.db
+test_convo.db
+
+# Node
+node_modules/
+frontend/dist/
+website/dist/
 
 # OS specific
 .DS_Store
-Thumbs.db 
+Thumbs.db
+
+# Type checking
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/

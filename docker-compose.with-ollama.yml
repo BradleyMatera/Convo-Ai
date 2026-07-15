@@ -1,0 +1,29 @@
+# Ollama is expected to be running on the host.
+# On Linux, host.docker.internal may need extra config.
+services:
+  ollama:
+    image: ollama/ollama:latest
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_models:/root/.ollama
+    restart: unless-stopped
+
+  convo-ai:
+    build: .
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./config.json:/app/config.json:ro
+      - convo_cache:/app/tts_cache
+      - convo_logs:/app/logs
+    environment:
+      - PYTHONUNBUFFERED=1
+    depends_on:
+      - ollama
+    restart: unless-stopped
+
+volumes:
+  ollama_models:
+  convo_cache:
+  convo_logs:

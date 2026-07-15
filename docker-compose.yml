@@ -1,0 +1,18 @@
+services:
+  convo-ai:
+    build: .
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./config.json:/app/config.json:ro
+      - convo_cache:/app/tts_cache
+      - convo_logs:/app/logs
+      - convo_db:/app/data
+    environment:
+      - PYTHONUNBUFFERED=1
+    restart: unless-stopped
+
+volumes:
+  convo_cache:
+  convo_logs:
+  convo_db:
