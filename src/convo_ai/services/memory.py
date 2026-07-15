@@ -218,6 +218,21 @@ class MemoryService:
             text = resp.json().get("response", "").strip()
             if text.upper() == "NONE" or not text:
                 return []
+            # Patterns that indicate "no real fact" — skip these
+            garbage_patterns = [
+                "none",
+                "not provided",
+                "not mentioned",
+                "not stated",
+                "not explicitly",
+                "no specific",
+                "no relevant",
+                "nothing worth",
+                "no information",
+                "was not mentioned",
+                "has not explicitly",
+                "no other relevant",
+            ]
             facts = []
             for line in text.split("\n"):
                 line = line.strip()
@@ -229,9 +244,17 @@ class MemoryService:
                     if bracket_end > 0:
                         category = line[1:bracket_end].lower()
                         content = line[bracket_end + 1 :].strip()
-                        if content:
-                            facts.append((category, content))
+                        if not content:
+                            continue
+                        # Filter out garbage facts
+                        content_lower = content.lower()
+                        if any(gp in content_lower for gp in garbage_patterns):
+                            continue
+                        facts.append((category, content))
                 else:
+                    line_lower = line.lower()
+                    if any(gp in line_lower for gp in garbage_patterns):
+                        continue
                     facts.append(("general", line))
             return facts
         except Exception as exc:

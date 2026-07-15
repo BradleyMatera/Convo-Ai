@@ -49,6 +49,14 @@ def analyze_mood(text: str) -> str:
     return "neutral"
 
 
+async def _safe_send(websocket: WebSocket, data: dict[str, Any]) -> None:
+    """Send JSON over WebSocket, silently ignoring errors if the socket is closed."""
+    import contextlib
+
+    with contextlib.suppress(Exception):
+        await websocket.send_text(json.dumps(data))
+
+
 def create_app(config: Config | None = None) -> FastAPI:
     """Build and return the FastAPI application."""
     if config is None:
@@ -302,7 +310,7 @@ def create_app(config: Config | None = None) -> FastAPI:
             facts = memory_svc.extract_facts(prompt, response_text)
             for category, content in facts:
                 entry = memory_svc.add_memory(content, category=category)
-                new_facts.append(entry)
+                new_facts.append(memory_svc._entry_to_dict(entry))
 
         # Persist conversation
         db: Database | None = state.get("db")
@@ -325,6 +333,13 @@ def create_app(config: Config | None = None) -> FastAPI:
         await websocket.accept()
         try:
             data = await websocket.receive()
+
+            # Handle disconnect messages gracefully
+            msg_type = data.get("type", "")
+            if msg_type == "websocket.disconnect":
+                logger.info("WebSocket client disconnected (close code: %s)", data.get("code"))
+                return
+
             prompt = ""
 
             if "bytes" in data:
@@ -334,7 +349,7 @@ def create_app(config: Config | None = None) -> FastAPI:
                     temp_path = f.name
                 stt: STTService | None = state.get("stt")
                 if stt is None:
-                    await websocket.send_text(json.dumps({"error": "stt not initialized"}))
+                    await _safe_send(websocket, {"error": "stt not initialized"})
                     return
                 prompt = stt.transcribe(temp_path)
                 Path(temp_path).unlink(missing_ok=True)
@@ -343,19 +358,20 @@ def create_app(config: Config | None = None) -> FastAPI:
                     text_data = json.loads(data["text"])
                     prompt = text_data.get("text", "")
                 except json.JSONDecodeError:
-                    await websocket.send_text(json.dumps({"error": "invalid json"}))
+                    await _safe_send(websocket, {"error": "invalid json"})
                     return
             else:
-                await websocket.send_text(json.dumps({"error": "invalid data format"}))
+                # Could be a disconnect or unknown message type — just bail
+                logger.warning("WebSocket received unknown message type: %s", msg_type)
                 return
 
             if not prompt:
-                await websocket.send_text(json.dumps({"error": "empty prompt"}))
+                await _safe_send(websocket, {"error": "empty prompt"})
                 return
 
             ollama: OllamaService | None = state.get("ollama")
             if ollama is None:
-                await websocket.send_text(json.dumps({"error": "ollama not initialized"}))
+                await _safe_send(websocket, {"error": "ollama not initialized"})
                 return
 
             # RAG: retrieve relevant memories
@@ -383,7 +399,7 @@ def create_app(config: Config | None = None) -> FastAPI:
                 facts = memory_svc.extract_facts(prompt, response_text)
                 for category, content in facts:
                     entry = memory_svc.add_memory(content, category=category)
-                    new_facts.append(entry)
+                    new_facts.append(memory_svc._entry_to_dict(entry))
 
             # TTS
             tts: TTSService | None = state.get("tts")
@@ -397,25 +413,24 @@ def create_app(config: Config | None = None) -> FastAPI:
             if db is not None:
                 db.add_entry(user_text=prompt, assistant_text=response_text, mood=mood)
 
-            await websocket.send_text(
-                json.dumps(
-                    {
-                        "text": prompt,
-                        "response": response_text,
-                        "audio": audio_b64,
-                        "mood": mood,
-                        "model": config.model,
-                        "memories_used": len(memories_used),
-                        "new_facts": len(new_facts),
-                        "new_fact_details": new_facts,
-                    }
-                )
+            await _safe_send(
+                websocket,
+                {
+                    "text": prompt,
+                    "response": response_text,
+                    "audio": audio_b64,
+                    "mood": mood,
+                    "model": config.model,
+                    "memories_used": len(memories_used),
+                    "new_facts": len(new_facts),
+                    "new_fact_details": new_facts,
+                },
             )
         except WebSocketDisconnect:
             logger.info("WebSocket client disconnected")
         except Exception as exc:
             logger.error("WebSocket error: %s", exc)
-            await websocket.send_text(json.dumps({"error": str(exc)}))
+            await _safe_send(websocket, {"error": str(exc)})
 
     # Serve built frontend if it exists
     frontend_dist = Path(__file__).resolve().parent.parent.parent.parent / "frontend" / "dist"

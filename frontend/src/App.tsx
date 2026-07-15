@@ -130,15 +130,33 @@ export default function App() {
   }, []);
   useEffect(scrollToBottom, [messages, scrollToBottom]);
 
-  // ─── WebSocket ──────────────────────────────────────────────────────
+  // ─── WebSocket with auto-reconnect ─────────────────────────────────
 
-  useEffect(() => {
+  const wsReconnectRef = useRef<number>(0);
+  const wsShouldReconnect = useRef(true);
+
+  const connectWs = useCallback(() => {
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
     const ws = new WebSocket(`${protocol}//${window.location.host}/ws`);
     wsRef.current = ws;
-    ws.onopen = () => setConnState("connected");
-    ws.onclose = () => { setConnState("disconnected"); setOrbState("idle"); };
-    ws.onerror = () => { setConnState("disconnected"); setOrbState("idle"); };
+
+    ws.onopen = () => {
+      setConnState("connected");
+      wsReconnectRef.current = 0;
+    };
+    ws.onclose = () => {
+      setConnState("disconnected");
+      setOrbState("idle");
+      if (wsShouldReconnect.current) {
+        wsReconnectRef.current += 1;
+        const delay = Math.min(1000 * wsReconnectRef.current, 5000);
+        setTimeout(() => connectWs(), delay);
+      }
+    };
+    ws.onerror = () => {
+      setConnState("disconnected");
+      setOrbState("idle");
+    };
     ws.onmessage = (event) => {
       setOrbState("idle");
       try {
@@ -156,12 +174,16 @@ export default function App() {
           timestamp: new Date().toISOString(),
         }]);
         if (data.audio) new Audio(`data:audio/wav;base64,${data.audio}`).play().catch(() => {});
-        // Refresh memories if new facts were learned
         if (data.new_facts > 0) refreshMemories();
       } catch { /* ignore */ }
     };
-    return () => ws.close();
   }, []);
+
+  useEffect(() => {
+    wsShouldReconnect.current = true;
+    connectWs();
+    return () => { wsShouldReconnect.current = false; wsRef.current?.close(); };
+  }, [connectWs]);
 
   // ─── Load initial data ──────────────────────────────────────────────
 
@@ -183,12 +205,43 @@ export default function App() {
 
   const sendText = (overrideText?: string) => {
     const trimmed = (overrideText ?? text).trim();
-    if (!trimmed || !wsRef.current || connState !== "connected") return;
+    if (!trimmed) return;
     setMessages((p) => [...p, { id: nextId(), role: "user", text: trimmed, timestamp: new Date().toISOString() }]);
-    wsRef.current.send(JSON.stringify({ text: trimmed }));
     setText("");
     setOrbState("thinking");
     setShowQuickPrompts(false);
+
+    // Try WebSocket first, fall back to REST API
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({ text: trimmed }));
+    } else {
+      // REST fallback — still gets RAG memory + fact extraction
+      fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: trimmed }),
+      })
+        .then((r) => r.json())
+        .then((data) => {
+          setOrbState("idle");
+          if (data.error) {
+            setError(data.error);
+            setMessages((p) => [...p, { id: nextId(), role: "assistant", text: `⚠️ ${data.error}`, timestamp: new Date().toISOString() }]);
+            return;
+          }
+          setError("");
+          setMessages((p) => [...p, {
+            id: nextId(), role: "assistant", text: data.response || "", mood: data.mood,
+            model: data.model, memoriesUsed: data.memories_used, newFacts: data.new_facts,
+            timestamp: new Date().toISOString(),
+          }]);
+          if (data.new_facts > 0) refreshMemories();
+        })
+        .catch((err) => {
+          setOrbState("idle");
+          setError(`Request failed: ${err.message}`);
+        });
+    }
   };
 
   const startRecording = async () => {
